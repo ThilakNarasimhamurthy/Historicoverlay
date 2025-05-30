@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Event" ADD COLUMN     "likeCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "saveCount" INTEGER NOT NULL DEFAULT 0;

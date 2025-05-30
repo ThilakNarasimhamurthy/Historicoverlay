@@ -1,0 +1,45 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  password_hash String
+  date_of_birth DateTime?
+  role          Role      @default(STUDENT)
+  is_active     Boolean   @default(true)
+  is_verified   Boolean   @default(false)
+  is_suspended  Boolean   @default(false)
+  last_login_at DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  // References to other models that could be added later
+  // subscriptions  Subscription?
+  // followers      Follow[]        @relation("following")
+  // following      Follow[]        @relation("follower")
+  // events         UsersOnEvents[]
+
+  @@map("users")
+}
+
+enum Role {
+  STUDENT
+  UNIVERSITY
+  COMPANY
+  ADMIN
+}

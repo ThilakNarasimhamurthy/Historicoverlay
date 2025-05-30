@@ -1,0 +1,370 @@
+// schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model (common fields for all roles)
+model User {
+  id            String        @id @default(uuid())
+  email         String        @unique
+  password      String
+  firstName     String
+  lastName      String
+  role          UserRole
+  accountStatus AccountStatus @default(ACTIVE)
+  loginHistory  DateTime[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relationships
+  events              Event[] // Created events
+  eventParticipations EventParticipation[] // Events participating in
+  subscription        Subscription? // User subscription
+  notifications       Notification[] // System notifications for this user
+  savedPosts          SavedPost[] // Posts saved by this user (from MongoDB)
+  likedEvents         LikedEvent[] // Events liked by this user
+  savedEvents         SavedEvent[] // Events saved by this user
+
+  // Role-specific data - fixed relations
+  student    Student?
+  university University?
+  company    Company?
+  admin      Admin?
+
+  @@index([email])
+  @@index([role])
+}
+
+// New SavedPost model for cross-database functionality
+model SavedPost {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  postId    String   // MongoDB post ID stored as string
+  savedAt   DateTime @default(now())
+
+  @@unique([userId, postId]) // Ensure a user can't save the same post twice
+  @@index([userId])
+  @@index([postId])
+}
+
+// SavedEvent model for tracking saved events (both internal and external)
+model SavedEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventId   String   // Can be internal or external event ID
+  savedAt   DateTime @default(now())
+
+  @@unique([userId, eventId]) // Ensure a user can't save the same event twice
+  @@index([userId])
+  @@index([eventId])
+}
+
+// LikedEvent model to track liked events (both internal and external)
+model LikedEvent {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  eventId    String   // Can be internal or external event ID
+  isExternal Boolean  @default(false) // Flag to identify if it's an external MongoDB event
+  likedAt    DateTime @default(now())
+
+  @@unique([userId, eventId]) // Ensure a user can't like the same event twice
+  @@index([userId])
+  @@index([eventId])
+  @@index([isExternal])
+}
+
+// User role enum
+enum UserRole {
+  STUDENT
+  UNIVERSITY
+  COMPANY
+  ADMIN
+}
+
+// Account status enum
+enum AccountStatus {
+  ACTIVE
+  VERIFIED
+  SUSPENDED
+  DELETED
+}
+
+// Event model (events created by users)
+model Event {
+  id          String      @id @default(uuid())
+  name        String
+  description String      @db.Text
+  category    String
+  location    String
+  coordinates Json?       // Store coordinates as { latitude: number, longitude: number }
+  status      EventStatus @default(PENDING)
+  startDate   DateTime
+  endDate     DateTime
+  creatorId   String
+  creator     User        @relation(fields: [creatorId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  capacity    Int?        // Maximum number of participants (optional)
+  isPublic    Boolean     @default(true)
+  tags        String[]    // Array of tags for the event
+  imageUrl    String?     // URL to event image
+  externalUrl String?     // External URL for registration or more info
+  likeCount Int @default(0)
+  saveCount Int @default(0)
+
+  // Relationships
+  participants  EventParticipation[] // Users participating in this event
+  notifications Notification[] // Notifications related to this event
+
+  @@index([creatorId])
+  @@index([status])
+  @@index([startDate])
+  @@index([category])
+  @@index([tags])
+}
+
+// Event status enum
+enum EventStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELED
+}
+
+// Event Participation model (users participating in events)
+model EventParticipation {
+  id                 String             @id @default(uuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id])
+  eventId            String
+  event              Event              @relation(fields: [eventId], references: [id])
+  rsvpStatus         RSVPStatus
+  registrationStatus RegistrationStatus
+  timestamp          DateTime           @default(now())
+  checkInTime        DateTime?          // When the user checked in to the event
+  feedback           String?            @db.Text // User feedback about the event
+  rating             Int?               // Optional rating from 1-5
+
+  @@unique([userId, eventId])
+  @@index([userId])
+  @@index([eventId])
+  @@index([rsvpStatus])
+  @@index([registrationStatus])
+}
+
+// RSVP status enum
+enum RSVPStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+// Registration status enum
+enum RegistrationStatus {
+  REGISTERED
+  PENDING
+  CANCELED
+  WAITLISTED
+}
+
+// Subscription model (user subscriptions)
+model Subscription {
+  id              String        @id @default(uuid())
+  userId          String        @unique
+  user            User          @relation(fields: [userId], references: [id])
+  planType        PlanType
+  paymentStatus   PaymentStatus
+  lastRenewalDate DateTime
+  nextRenewalDate DateTime
+  billingHistory  Json[]
+  stripeCustomerId String?      // For integration with Stripe payments
+  canceledAt      DateTime?     // When subscription was canceled, if applicable
+
+  // Relationships
+  notifications Notification[] // Notifications related to this subscription
+  
+  @@index([userId])
+}
+
+// Plan type enum
+enum PlanType {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+// Payment status enum
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELED
+}
+
+// Notification model with expanded fields to match GraphQL typeDefs
+model Notification {
+  id               String              @id @default(uuid())
+  userId           String
+  user             User                @relation(fields: [userId], references: [id])
+  message          String              @db.Text
+  type             NotificationType
+  readStatus       Boolean             @default(false)
+  timestamp        DateTime            @default(now())
+  channel          NotificationChannel
+  priority         NotificationPriority @default(NORMAL)
+  status           NotificationStatus   @default(PENDING)
+  recipient        String?             // Store phone number or email here
+  data             Json?               // Additional data related to the notification
+  metadata         Json?               // Additional metadata for the notification
+  sender           Json?               // Store sender information
+  linkedEntityType LinkedEntityType?
+  linkedEntityId   String?            // ID of linked entity
+  updatedAt        DateTime            @updatedAt
+
+  // Clean relations to either event or subscription
+  eventId        String?
+  event          Event?        @relation(fields: [eventId], references: [id])
+  
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  
+  @@index([userId])
+  @@index([readStatus])
+  @@index([timestamp])
+  @@index([status])
+  @@index([type])
+  @@index([linkedEntityId])
+}
+
+// Updated Notification type enum to match GraphQL
+enum NotificationType {
+  EVENT_UPDATE
+  EVENT_REMINDER
+  PAYMENT_CONFIRMATION
+  PAYMENT_FAILED
+  SUBSCRIPTION_EXPIRING
+  SYSTEM_ALERT
+  WELCOME
+  LIKE
+  COMMENT
+  FOLLOW
+  MENTION
+  TAG
+  SHARE
+  CUSTOM
+}
+
+// Updated Notification channel enum to match GraphQL
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+// New enums from GraphQL typeDefs
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum LinkedEntityType {
+  POST
+  COMMENT
+  USER
+  EVENT
+  COURSE
+  MESSAGE
+}
+
+// Student model (role-specific data for students)
+model Student {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id])
+  university     String   @default("Unknown")
+  graduationYear Int
+  specialization String    // Specialization fields like "CS", "Marketing", etc.
+  interests      String[]
+  careerGoals    String[]  // Career goals like "Internship", "Networking", etc.
+  dateOfBirth    DateTime
+  studentId      String?   // University-issued student ID
+  bio            String?   @db.Text
+  profilePicture String?   // URL to profile picture
+  
+  @@index([specialization])
+  @@index([university])
+  @@index([graduationYear])
+}
+
+// University model (role-specific data for university accounts)
+model University {
+  userId           String  @id
+  user             User    @relation(fields: [userId], references: [id])
+  institutionName  String
+  foundationYear   Int
+  address          String
+  contactNumber    String
+  website          String?
+  logo             String? // URL to university logo
+  description      String? @db.Text
+  accreditations   String[]
+  
+  @@index([institutionName])
+}
+
+// Company model (role-specific data for company accounts)
+model Company {
+  userId           String  @id
+  user             User    @relation(fields: [userId], references: [id])
+  companyName      String
+  industry         String
+  foundationYear   Int
+  address          String
+  contactNumber    String
+  website          String?
+  logo             String? // URL to company logo
+  description      String? @db.Text
+  size             CompanySize?
+  
+  @@index([companyName])
+  @@index([industry])
+}
+
+// Company size enum
+enum CompanySize {
+  STARTUP
+  SMALL
+  MEDIUM
+  LARGE
+  ENTERPRISE
+}
+
+// Admin model (role-specific data for system administrator)
+model Admin {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id])
+  accessLevel    String   @default("FULL")
+  adminSince     DateTime @default(now())
+  lastAccess     DateTime @default(now())
+  department     String?
+  permissions    Json?    // Specific permissions for this admin
+  // This model represents the system administrator with full access
+  // Admin accounts can only be created through backend, not from frontend
+}
