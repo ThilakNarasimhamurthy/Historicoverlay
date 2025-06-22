@@ -1,0 +1,61 @@
+import time
+import re
+import json
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+
+# --- Config ---
+chromedriver_path = "/usr/local/bin/chromedriver"
+base_url = "https://nycrecords.access.preservica.com/uncategorized/SO_e6e79554-4227-414f-afc2-5f008fb9c96b/"
+target_block_lot_set = {(610, 1), (549, 1)}  # Sample from landmark set
+
+# --- Set up Selenium ---
+options = Options()
+options.add_argument('--headless')
+options.add_argument('--no-sandbox')
+options.add_argument('--disable-gpu')
+driver = webdriver.Chrome(service=Service(chromedriver_path), options=options)
+driver.get(base_url)
+time.sleep(5)
+
+results = []
+cards = driver.find_elements(By.CLASS_NAME, "card")
+
+for card in cards:
+    try:
+        title_elem = card.find_element(By.TAG_NAME, "h3")
+        desc_elem = card.find_element(By.CLASS_NAME, "archive_description")
+        img_elem = card.find_element(By.TAG_NAME, "img")
+        link_elem = card.find_element(By.TAG_NAME, "a")
+
+        title = title_elem.text.strip()
+        desc = desc_elem.text.strip()
+        img_url = img_elem.get_attribute("src")
+        detail_url = link_elem.get_attribute("href")
+
+        # Extract block and lot from description using regex
+        match = re.search(r"Block (\d+) Lot (\d+)", desc)
+        if match:
+            block = int(match.group(1))
+            lot = int(match.group(2))
+
+            if (block, lot) in target_block_lot_set:
+                results.append({
+                    "title": title,
+                    "block": block,
+                    "lot": lot,
+                    "thumbnail_url": img_url,
+                    "detail_url": detail_url
+                })
+    except Exception as e:
+        continue
+
+# Save results to JSON
+with open("filtered_preservica_sample.json", "w") as f:
+    json.dump(results, f, indent=2)
+
+print(f"✅ Saved {len(results)} matched entries to filtered_preservica_sample.json")
+driver.quit()
+
