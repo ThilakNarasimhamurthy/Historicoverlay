@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 7, "column": 0}, "map": {"version":3,"sources":["file:///Users/thilaknarasimhamurthy/Downloads/studenthub/app/layout.tsx"],"sourcesContent":["// app/layout.tsx\n'use client';\n\nimport { ApolloProvider } from '@apollo/client';\nimport { AuthProvider } from '@/components/AuthProvider';\nimport apolloClient from '@/lib/apollo';\n\nexport default function RootLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  return (\n    <html lang=\"en\">\n      <body>\n        <ApolloProvider client={apolloClient}>\n          <AuthProvider>\n            {children}\n          </AuthProvider>\n        </ApolloProvider>\n      </body>\n    </html>\n  );\n}"],"names":[],"mappings":"AAAA,iBAAiB;;;;;AAGjB;;;;;;;;;;;AAFA;;;;;AAMe,SAAS,WAAW,EACjC,QAAQ,EAGT;IACC,qBACE,6LAAC;QAAK,MAAK;kBACT,cAAA,6LAAC;sBACC,cAAA,6LAAC,2KAAA,CAAA,iBAAc;gBAAC,QAAQ;0BACtB,cAAA,6LAAC;8BACE;;;;;;;;;;;;;;;;;;;;;AAMb;KAhBwB","debugId":null}}]
-}
